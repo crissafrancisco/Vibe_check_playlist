@@ -15,9 +15,9 @@ Upload a photo. We'll read your vibe. You'll get the soundtrack.
    ```bash
    cp .env.example .env
    ```
-   Then edit `.env` and add your [Google Gemini API key](https://aistudio.google.com/apikey):
+   Then edit `.env` and add your [Groq API key](https://console.groq.com/keys):
    ```
-   GOOGLE_API_KEY=your_key_here
+   GROQ_API_KEY=your_key_here
    ```
 
 4. **Run the app**:
@@ -27,7 +27,7 @@ Upload a photo. We'll read your vibe. You'll get the soundtrack.
 
 ## Features
 
-- **Vibe Analysis** — Gemini Vision reads the mood, energy, aesthetic, era, and color palette from any photo
+- **Vibe Analysis** — Llama 4 Scout reads the mood, energy, aesthetic, era, and color palette from any photo
 - **Vibe Story** — A cinematic 3-4 sentence narrator-style story about your vibe
 - **Playlist Generator** — 10 song recommendations with YouTube links
 - **Genre Lock** — Force all recommendations into a specific genre (sidebar)
@@ -37,6 +37,6 @@ Upload a photo. We'll read your vibe. You'll get the soundtrack.
 ## Tech Stack
 
 - Streamlit
-- Google Gemini API (gemini-2.0-flash)
+- Groq API (Llama 4 Scout for vision, Llama 3.3 70B for text)
 - LangChain (LCEL chains)
 - Pydantic (structured output parsing)

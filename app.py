@@ -60,7 +60,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(
         "Made with 💜 and vibes\n\n"
-        "Powered by Google Gemini + LangChain"
+        "Powered by Groq + Llama + LangChain"
     )
 
 # ---------------------------------------------------------------------------
