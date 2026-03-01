@@ -30,10 +30,10 @@ Look at this image and extract the VIBE. Be dramatic, specific, and fun.
 
 Return your analysis as valid JSON with exactly these fields:
 - "mood": the dominant emotional mood (e.g., "melancholic main character energy", "chaotic brunch energy")
-- "energy": integer from 1 (comatose chill) to 10 (unhinged hype)
+- "energy": integer from 1 (comatose chill) to 10 (unhinged hype). IMPORTANT: Actually evaluate the energy carefully based on what you see. Bright/saturated colors, action, crowds, movement, hype outfits = high energy (7-10). Dark, muted, calm, cozy, peaceful, solitary scenes = low energy (1-3). Moderate, everyday, neutral scenes = mid energy (4-6). Do NOT default to 4 — really look at the image and pick the right number.
 - "aesthetic": the aesthetic/vibe name (e.g., "dark academia", "coastal grandmother", "feral goblincore")
 - "era": the decade or era this feels like (e.g., "late 90s", "2010s Tumblr", "Y2K")
-- "color_palette": list of 3-5 dominant color names from the image
+- "color_palette": list of 3-5 dominant colors from the image as HEX codes (e.g., "#FF5733", "#2E86AB", "#1A1A2E"). Always use hex format, never color names.
 - "vibe_summary": a single punchy sentence capturing the whole vibe
 
 Be creative and entertaining. Think like a Gen-Z astrology girlie who moonlights as a film critic.
