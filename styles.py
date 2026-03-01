@@ -175,5 +175,19 @@ div[data-testid="stSidebar"] {
 div[data-testid="stSidebar"] .stMarkdown {
     color: #e2e8f0;
 }
+
+/* Chat section styling */
+.stChatMessage {
+    background: rgba(30, 30, 47, 0.5);
+    border-radius: 12px;
+    border: 1px solid rgba(167, 139, 250, 0.1);
+}
+
+.chat-section-header {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #a78bfa;
+    margin: 1.5rem 0 0.5rem 0;
+}
 </style>
 """

@@ -10,6 +10,7 @@ from chains import (
     generate_playlist,
     battle_vibes,
     generate_fusion_playlist,
+    chat_adjust_playlist,
 )
 from styles import MAIN_CSS
 
@@ -25,6 +26,22 @@ st.set_page_config(
 )
 
 st.markdown(MAIN_CSS, unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# Session state initialization
+# ---------------------------------------------------------------------------
+defaults = {
+    "vibe_profile": None,
+    "current_playlist": None,
+    "vibe_story": None,
+    "chat_messages": [],
+    "chat_history": [],
+    "playlist_generated": False,
+    "current_file_key": None,
+}
+for key, val in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -201,38 +218,125 @@ else:
         image_bytes, image = process_image(uploaded_file)
         st.image(image, caption="Your vibe, loading...", use_container_width=True)
 
-        # --- Analyze ---
-        with st.spinner("🔮 Reading your aura..."):
-            profile = analyze_image(image_bytes)
+        # Detect new file upload — reset all state
+        file_key = f"{uploaded_file.name}_{uploaded_file.size}"
+        if st.session_state.current_file_key != file_key:
+            st.session_state.current_file_key = file_key
+            st.session_state.playlist_generated = False
+            st.session_state.chat_messages = []
+            st.session_state.chat_history = []
+            st.session_state.current_playlist = None
+            st.session_state.vibe_profile = None
+            st.session_state.vibe_story = None
 
-        render_vibe_card(profile)
+        # --- Run the pipeline only once per photo ---
+        if not st.session_state.playlist_generated:
+            with st.spinner("🔮 Reading your aura..."):
+                profile = analyze_image(image_bytes)
+            st.session_state.vibe_profile = profile
 
-        # --- Vibe Story ---
-        with st.spinner("📝 Writing your origin story..."):
-            story = generate_vibe_story(profile)
+            render_vibe_card(profile)
 
-        st.markdown('<p class="section-title">📖 Your Vibe Story</p>', unsafe_allow_html=True)
-        st.markdown(f'<div class="vibe-story">{story}</div>', unsafe_allow_html=True)
+            with st.spinner("📝 Writing your origin story..."):
+                story = generate_vibe_story(profile)
+            st.session_state.vibe_story = story
 
-        # --- Playlist ---
-        with st.spinner("🎵 Curating your soundtrack..."):
-            songs = generate_playlist(profile, genre_lock)
+            st.markdown('<p class="section-title">📖 Your Vibe Story</p>', unsafe_allow_html=True)
+            st.markdown(f'<div class="vibe-story">{story}</div>', unsafe_allow_html=True)
 
+            with st.spinner("🎵 Curating your soundtrack..."):
+                songs = generate_playlist(profile, genre_lock)
+            st.session_state.current_playlist = songs
+            st.session_state.playlist_generated = True
+
+            # Seed chat with DJ greeting
+            st.session_state.chat_messages = [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Yo! 🎧 Your playlist is ready! If you want me to switch "
+                        "things up — more upbeat, different genre, swap out a track "
+                        "— just say the word. I'm your DJ, let's make this perfect. 🔥"
+                    ),
+                }
+            ]
+        else:
+            # Re-display from session state
+            render_vibe_card(st.session_state.vibe_profile)
+            st.markdown('<p class="section-title">📖 Your Vibe Story</p>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="vibe-story">{st.session_state.vibe_story}</div>',
+                unsafe_allow_html=True,
+            )
+
+        # --- Always render current playlist from session state ---
         st.markdown('<p class="section-title">🎶 Your Playlist</p>', unsafe_allow_html=True)
-        render_song_cards(songs)
+        render_song_cards(st.session_state.current_playlist)
 
         # --- Opposite Day ---
         st.markdown("---")
         if st.button("🔄 Opposite Day — Flip the Vibe!", use_container_width=True):
             with st.spinner("🌀 Flipping your vibe to the shadow realm..."):
-                opposite_songs = generate_playlist(profile, genre_lock, opposite=True)
-
+                opposite_songs = generate_playlist(
+                    st.session_state.vibe_profile, genre_lock, opposite=True
+                )
             st.markdown(
                 '<p class="section-title">🔄 Opposite Day Playlist</p>',
                 unsafe_allow_html=True,
             )
             render_song_cards(opposite_songs)
+
+        # --- Chat with DJ Vibe ---
+        st.markdown("---")
+        st.markdown(
+            '<p class="section-title">💬 Chat with DJ Vibe</p>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Tell DJ Vibe how to adjust your playlist — swap songs, change the mood, lock a genre, anything goes!")
+
+        for msg in st.session_state.chat_messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        if user_input := st.chat_input("Tell me how to adjust your playlist..."):
+            # Show user message
+            st.session_state.chat_messages.append(
+                {"role": "user", "content": user_input}
+            )
+            with st.chat_message("user"):
+                st.markdown(user_input)
+
+            # Call DJ Vibe
+            with st.chat_message("assistant"):
+                with st.spinner("🎧 DJ Vibe is cooking..."):
+                    dj_message, updated_songs, human_msg, ai_msg = chat_adjust_playlist(
+                        user_message=user_input,
+                        profile=st.session_state.vibe_profile,
+                        current_songs=st.session_state.current_playlist,
+                        chat_history=st.session_state.chat_history,
+                        genre_lock=genre_lock,
+                    )
+                st.markdown(dj_message)
+
+            # Update state
+            st.session_state.chat_messages.append(
+                {"role": "assistant", "content": dj_message}
+            )
+            st.session_state.chat_history.extend([human_msg, ai_msg])
+
+            # Cap history at 40 messages (20 turns)
+            if len(st.session_state.chat_history) > 40:
+                st.session_state.chat_history = st.session_state.chat_history[-40:]
+
+            if updated_songs is not None:
+                st.session_state.current_playlist = updated_songs
+                st.rerun()
+
     else:
+        # No file uploaded — reset state
+        st.session_state.playlist_generated = False
+        st.session_state.current_file_key = None
+
         st.markdown(
             "<div style='text-align:center; padding:4rem 0; color:#888;'>"
             "<p style='font-size:3rem;'>📸</p>"

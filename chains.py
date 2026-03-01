@@ -1,9 +1,10 @@
 import base64
+import json
 import urllib.parse
 
 from langchain_groq import ChatGroq
-from langchain_core.messages import HumanMessage
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 
 from models import VibeProfile, PlaylistResponse
@@ -290,3 +291,118 @@ def generate_fusion_playlist(
         )
 
     return songs
+
+
+# ---------------------------------------------------------------------------
+# Chat — DJ Vibe playlist adjustments
+# ---------------------------------------------------------------------------
+
+CHAT_DJ_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", (
+        "You are DJ Vibe, a cool, fun, and knowledgeable DJ friend who helps "
+        "curate the perfect playlist. You're enthusiastic but not obnoxious, "
+        "and you know music across every genre and era.\n\n"
+        "CONTEXT:\n"
+        "The user uploaded a photo and got this vibe profile:\n"
+        "- Mood: {mood}\n"
+        "- Energy: {energy}/10\n"
+        "- Aesthetic: {aesthetic}\n"
+        "- Era: {era}\n"
+        "- Vibe Summary: {vibe_summary}\n\n"
+        "Their current playlist is:\n{current_playlist}\n\n"
+        "RULES:\n"
+        "1. When the user asks to modify the playlist, respond conversationally "
+        "FIRST, then include the FULL updated playlist (all 10 songs) in the "
+        "format shown below.\n"
+        "2. When the user asks a question that does NOT require playlist changes "
+        "(e.g., 'why did you pick song 3?'), just respond conversationally "
+        "WITHOUT including the playlist JSON section.\n"
+        "3. Songs MUST be real, well-known songs by real artists.\n"
+        "4. Always return exactly 10 songs in the updated playlist.\n"
+        "5. Be fun, use slang, talk like a cool DJ friend.\n"
+        "6. For youtube_url, use: https://www.youtube.com/results?search_query=<url_encoded>\n"
+        "{genre_lock_instruction}"
+        "\n\nRESPONSE FORMAT (when playlist changes are needed):\n"
+        "<your conversational message>\n\n"
+        "---PLAYLIST_JSON---\n"
+        '{{\"songs\": [{{\"name\": \"...\", \"artist\": \"...\", \"genre\": \"...\", '
+        '\"why\": \"...\", \"youtube_url\": \"...\"}}]}}\n'
+        "---END_PLAYLIST_JSON---\n\n"
+        "RESPONSE FORMAT (when no playlist changes needed):\n"
+        "<your conversational message only, no JSON section>"
+    )),
+    MessagesPlaceholder("chat_history"),
+    ("human", "{user_message}"),
+])
+
+
+def format_playlist_for_prompt(songs: list[dict]) -> str:
+    """Format current playlist as a numbered list for the system prompt."""
+    lines = []
+    for i, song in enumerate(songs, 1):
+        lines.append(
+            f"{i}. \"{song['name']}\" by {song['artist']} ({song['genre']}) "
+            f"— {song['why']}"
+        )
+    return "\n".join(lines)
+
+
+def parse_chat_response(raw: str) -> tuple[str, list[dict] | None]:
+    """Parse DJ chat response into conversational message and optional playlist."""
+    if "---PLAYLIST_JSON---" in raw:
+        parts = raw.split("---PLAYLIST_JSON---")
+        message = parts[0].strip()
+        json_str = parts[1].split("---END_PLAYLIST_JSON---")[0].strip()
+        try:
+            data = json.loads(json_str)
+            songs = data.get("songs", [])
+            for song in songs:
+                query = f"{song['name']} {song['artist']}"
+                song["youtube_url"] = (
+                    f"https://www.youtube.com/results?"
+                    f"search_query={urllib.parse.quote_plus(query)}"
+                )
+            return message, songs
+        except (json.JSONDecodeError, KeyError):
+            return raw.strip(), None
+    else:
+        return raw.strip(), None
+
+
+def chat_adjust_playlist(
+    user_message: str,
+    profile: VibeProfile,
+    current_songs: list[dict],
+    chat_history: list,
+    genre_lock: str | None = None,
+) -> tuple[str, list[dict] | None, HumanMessage, AIMessage]:
+    """Process a chat message to adjust the playlist.
+
+    Returns (dj_message, updated_songs_or_None, human_msg, ai_msg).
+    """
+    llm = get_llm()
+
+    genre_lock_instruction = ""
+    if genre_lock and genre_lock != "No Lock (Any Genre)":
+        genre_lock_instruction = (
+            f"\n- IMPORTANT: ALL songs MUST be from the {genre_lock} genre. No exceptions.\n"
+        )
+
+    chain = CHAT_DJ_PROMPT | llm | StrOutputParser()
+    raw = chain.invoke({
+        "mood": profile.mood,
+        "energy": profile.energy,
+        "aesthetic": profile.aesthetic,
+        "era": profile.era,
+        "vibe_summary": profile.vibe_summary,
+        "current_playlist": format_playlist_for_prompt(current_songs),
+        "chat_history": chat_history,
+        "user_message": user_message,
+        "genre_lock_instruction": genre_lock_instruction,
+    })
+
+    dj_message, updated_songs = parse_chat_response(raw)
+    human_msg = HumanMessage(content=user_message)
+    ai_msg = AIMessage(content=raw)
+
+    return dj_message, updated_songs, human_msg, ai_msg
